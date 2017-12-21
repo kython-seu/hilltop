@@ -1,6 +1,7 @@
 package kason.custom.partition.consumer.function2;
 
-import kason.custom.partition.Worker;
+
+import kason.custom.partition.worker.thread.Worker;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
