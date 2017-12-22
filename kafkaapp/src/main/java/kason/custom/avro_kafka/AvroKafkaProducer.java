@@ -33,7 +33,7 @@ public class AvroKafkaProducer {
         props.put("value.serializer", "org.apache.kafka.common.serialization.ByteArraySerializer");
 
         Schema.Parser parser = new Schema.Parser();
-        Schema schema = parser.parse(USER_SCHEMA);
+        Schema schema = parser.parse(ReadSchema.read());
         Injection<GenericRecord, byte[]> recordInjection = GenericAvroCodecs.toBinary(schema);
 
         KafkaProducer<String, byte[]> producer = new KafkaProducer<>(props);

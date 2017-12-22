@@ -46,7 +46,7 @@ public class AvroKafkaConsumer {
     public void testConsumer() {
         kafkaConsumer.subscribe(topics);
         Schema.Parser parser = new Schema.Parser();
-        Schema schema = parser.parse(USER_SCHEMA);
+        Schema schema = parser.parse(ReadSchema.read());
         Injection<GenericRecord, byte[]> recordInjection = GenericAvroCodecs.toBinary(schema);
         try {
             while (true) {
