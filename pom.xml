@@ -18,10 +18,11 @@
         <spark.version>2.1.0</spark.version>
         <scala.version>2.11</scala.version>
         <hadoop.version>2.6.0</hadoop.version>
-        <kafka.version>0.10.0.1</kafka.version>
+        <kafka.version>0.10.2.1</kafka.version>
         <zkclient>0.10</zkclient>
         <zookeeper>3.4.5</zookeeper>
         <guava>23.0</guava>
+        <json-lib>2.4</json-lib>
     </properties>
 
     <dependencyManagement>
@@ -89,6 +90,13 @@
                 <artifactId>spark-mllib_${scala.version}</artifactId>
                 <version>${spark.version}</version>
             </dependency>
+
+            <dependency>
+                <groupId>net.sf.json-lib</groupId>
+                <artifactId>json-lib</artifactId>
+                <version>${json-lib}</version>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
     <dependencies>

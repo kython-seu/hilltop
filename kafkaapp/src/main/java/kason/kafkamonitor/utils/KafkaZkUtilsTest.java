@@ -34,7 +34,7 @@ public class KafkaZkUtilsTest {
 
     @Test
     public void getAllBrokersInCluster() throws Exception {
-        KafkaZkUtils.getAllBrokersInCluster(zkClient);
+        KafkaZkUtils.getAllBrokersInCluster();
     }
 
 }

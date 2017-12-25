@@ -1,6 +1,8 @@
 package kason.kafkamonitor.utils;
 
+import kafka.utils.ZKStringSerializer$;
 import kason.kafkamonitor.constants.KafkaZKConfig;
+import kason.kafkamonitor.entity.KafkaBrokerInfo;
 import org.I0Itec.zkclient.ZkClient;
 import org.I0Itec.zkclient.exception.ZkNoNodeException;
 import org.apache.commons.lang3.StringUtils;
@@ -9,6 +11,7 @@ import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -16,11 +19,14 @@ import java.util.List;
  * Created by zhangkai12 on 2017/12/23.
  */
 public class KafkaZkUtils {
-
-
     private static final Logger logger = LoggerFactory.getLogger(KafkaZkUtils.class);
-
-    public static List<String> getChildrenParentMayNotExist(ZkClient zkClient, String path) {
+    private static ZkClient zkClient;
+    static {
+        int zkSessionTimeoutMs = 5000;
+        int zkConnectionTimeoutMs = 5000;
+        zkClient = new ZkClient(KafkaZKConfig.ZOOKEEPER_IP_PORT,zkSessionTimeoutMs,zkConnectionTimeoutMs, ZKStringSerializer$.MODULE$);
+    }
+    public static List<String> getChildrenParentMayNotExist(String path) {
         try {
             return zkClient.getChildren(path);
         } catch (ZkNoNodeException e) {
@@ -31,19 +37,19 @@ public class KafkaZkUtils {
         }
     }
 
-    public static Pair<String, Stat> readData(ZkClient client, String path) {
+    public static Pair<String, Stat> readData(String path) {
         Stat stat = new Stat();
-        String dataStr = client.readData(path, stat);
+        String dataStr = zkClient.readData(path, stat);
         System.out.println(dataStr);
         return Pair.of(dataStr, stat);
     }
 
-    public static Pair<String, Stat> readDataMaybeNull(ZkClient client, String path) {
+    public static Pair<String, Stat> readDataMaybeNull(String path) {
         Stat stat = new Stat();
         Pair<String, Stat> dataAndStat = null;
         try {
-            logger.info("[path {}]", path);
-            dataAndStat = Pair.of((String) client.readData(path, stat), stat);
+            logger.debug("[path {}]", path);
+            dataAndStat = Pair.of((String) zkClient.readData(path, stat), stat);
         } catch (ZkNoNodeException nkex) {
             return Pair.of(null, stat);
         } catch (Exception ex) {
@@ -52,8 +58,9 @@ public class KafkaZkUtils {
         return dataAndStat;
     }
 
-    public static void getBrokerInfo(ZkClient zkClient, int brokerId) {
-        String brokerInfoStr = readDataMaybeNull(zkClient, KafkaZKConfig.KAFKA_ZK_BROKER + "/" + brokerId).getLeft();
+    public static KafkaBrokerInfo getBrokerInfo(int brokerId) {
+        String brokerInfoStr = readDataMaybeNull( KafkaZKConfig.KAFKA_ZK_BROKER + "/" + brokerId).getLeft();
+
        /* Pair<String, Stat> brokerInfoStr = readData(zkClient, KafkaZKConfig.KAFKA_ZK_BROKER + "/" + brokerId);
         if(brokerInfoStr != null){
             logger.info("not null");
@@ -61,23 +68,33 @@ public class KafkaZkUtils {
         }else {
             logger.info("null");
         }*/
+        KafkaBrokerInfo kafkaBrokerInfo = null;
         if (StringUtils.isNotEmpty(brokerInfoStr)) {
-            logger.info("[broker info {}] ", brokerInfoStr);
+            logger.debug("[broker info {}] ", brokerInfoStr);
+            kafkaBrokerInfo = new KafkaBrokerInfo(brokerId,KafkaZKConfig.KAFKA_ZK_BROKER + "/" + brokerId,brokerInfoStr);
+            logger.info("[broker message {}]", kafkaBrokerInfo);
+
         }
+        return kafkaBrokerInfo;
     }
 
-    public static void getAllBrokersInCluster(ZkClient zkClient) {
-        List<String> brokers = getChildrenParentMayNotExist(zkClient, KafkaZKConfig.KAFKA_ZK_BROKER);
+    public static List<KafkaBrokerInfo> getAllBrokersInCluster() {
+        List<String> brokers = getChildrenParentMayNotExist(KafkaZKConfig.KAFKA_ZK_BROKER);
+        List<KafkaBrokerInfo> brokerLists = new ArrayList<>();
         //if(brokers)
         if (brokers != null) {
             Collections.sort(brokers);
         }
 
         for (String brokerStr : brokers) {
-            logger.info("broker {} ", brokerStr);
-            getBrokerInfo(zkClient, Integer.parseInt(brokerStr));
+            logger.debug("broker {} ", brokerStr);
+            KafkaBrokerInfo brokerInfo = getBrokerInfo(Integer.parseInt(brokerStr));
+            if (brokerInfo != null){
+                brokerLists.add(brokerInfo);
+            }
         }
 
+        return brokerLists;
     }
 
 
