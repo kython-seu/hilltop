@@ -2,11 +2,13 @@ package com.scala.action.streaming
 import kafka.serializer.StringDecoder
 import org.apache.spark.SparkConf
 import org.apache.spark.streaming.dstream.{DStream, InputDStream}
+import org.apache.spark.streaming.kafka010.KafkaUtils
 import org.apache.spark.streaming.{Duration, StreamingContext}
-import org.apache.spark.streaming.kafka.KafkaUtils
+
 /**
   * Created by kason_zhang on 4/10/2017.
   */
+/*
 object KafkaSparkDemoMain {
   def main(args: Array[String]) {
     val sparkConf = new SparkConf().setMaster("local[3]").setAppName("kafka-spark-demo")
@@ -41,3 +43,4 @@ object KafkaSparkDemoMain {
     KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](scc, kafkaParam, topics)
   }
 }
+*/
