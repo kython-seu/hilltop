@@ -1,5 +1,7 @@
 package kason.kafkamonitor.utils;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import kafka.utils.ZKStringSerializer$;
 import kason.kafkamonitor.constants.KafkaZKConfig;
 import kason.kafkamonitor.entity.KafkaBrokerInfo;
@@ -10,7 +12,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import kafka.utils.ZkUtils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -97,5 +99,31 @@ public class KafkaZkUtils {
         return brokerLists;
     }
 
+
+
+    /*public static ZkClient getZkClientSerializer(){
+
+    }*/
+    public static void getAllTopics(String topic){
+        Pair<String, Stat> stringStatPair = readData(KafkaZKConfig.KAFKA_ZK_BROKER_TOPICS + "/" + topic);
+        JSONObject partitionObject = JSON.parseObject(stringStatPair.getLeft()).getJSONObject("partitions");
+        for (String partition : partitionObject.keySet()) {
+            String path = String.format(KafkaZKConfig.TOPIC_ISR, topic, Integer.valueOf(partition));
+            logger.info("path {}", path);
+            Pair<String, Stat> stringStatPair1 = readDataMaybeNull(path);
+            logger.info("topic str {}", stringStatPair1.getLeft());
+
+
+            //ZkUtils.apply()
+            /*Tuple2<Option<String>, Stat> tuple2 = ZkUtils.apply(zkc, false).readDataMaybeNull(path);
+            JSONObject topicMetadata = JSON.parseObject(tuple2._1.get());
+            MetadataInfo metadate = new MetadataInfo();
+            metadate.setIsr(topicMetadata.getString("isr"));
+            metadate.setLeader(topicMetadata.getInteger("leader"));
+            metadate.setPartitionId(Integer.valueOf(partition));
+            metadate.setReplicas(getReplicasIsr(clusterAlias, topic, Integer.valueOf(partition)));
+            targets.add(metadate);*/
+        }
+    }
 
 }

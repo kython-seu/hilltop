@@ -1,16 +1,24 @@
 package kason.kafkamonitor.inter;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import kafka.admin.AdminClient;
 import kafka.coordinator.GroupOverview;
+import kafka.utils.ZkUtils;
+import kason.kafkamonitor.constants.KafkaProperties;
+import kason.kafkamonitor.constants.KafkaZKConfig;
 import kason.kafkamonitor.entity.KafkaBrokerInfo;
+import kason.kafkamonitor.entity.MetadataInfo;
 import kason.kafkamonitor.impl.KafkaMonitorService;
 import kason.kafkamonitor.utils.KafkaZkUtils;
+import kason.kafkamonitor.utils.ZKPoolUtils;
+import org.I0Itec.zkclient.ZkClient;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.common.Node;
 
 import org.apache.kafka.common.TopicPartition;
+import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.Option;
@@ -18,8 +26,15 @@ import scala.Tuple2;
 import scala.collection.Iterator;
 
 import kafka.admin.AdminClient.ConsumerGroupSummary;
+import scala.collection.JavaConversions;
+import scala.collection.Seq;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+
+import static kason.kafkamonitor.constants.KafkaZKConfig.CLUSTER_ZK_NAME;
+import static kason.kafkamonitor.constants.KafkaZKConfig.TOPIC_ISR;
 
 /**
  * Created by zhangkai12 on 2017/12/23.
@@ -27,11 +42,59 @@ import java.util.Properties;
 public class KafkaMonitorServiceImpl implements KafkaMonitorService {
 
     private final static Logger logger = LoggerFactory.getLogger(KafkaMonitorServiceImpl.class);
+    private ZKPoolUtils zkPool = ZKPoolUtils.getInstance();
     @Override
     public List<KafkaBrokerInfo> getBrokerInfoList() {
         return KafkaZkUtils.getAllBrokersInCluster();
     }
 
+    @Override
+    public List<MetadataInfo> findKafkaLeader(String topic) {
+
+        ZkClient zkc = zkPool.getZkClientSerializer(KafkaZKConfig.CLUSTER_ZK_NAME);
+        List<MetadataInfo> targets = new ArrayList<>();
+        if (ZkUtils.apply(zkc, false).pathExists(KafkaZKConfig.KAFKA_ZK_BROKER_TOPICS)) {
+            Seq<String> subBrokerTopicsPaths = ZkUtils.apply(zkc, false).getChildren(KafkaZKConfig.KAFKA_ZK_BROKER_TOPICS);
+            List<String> topics = JavaConversions.seqAsJavaList(subBrokerTopicsPaths);
+            if (topics.contains(topic)) {
+                Tuple2<Option<String>, Stat> tuple = ZkUtils.apply(zkc, false).readDataMaybeNull(KafkaZKConfig.KAFKA_ZK_BROKER_TOPICS + "/" + topic);
+                JSONObject partitionObject = JSON.parseObject(tuple._1.get()).getJSONObject("partitions");
+                for (String partition : partitionObject.keySet()) {
+                    String path = String.format(TOPIC_ISR, topic, Integer.valueOf(partition));
+                    Tuple2<Option<String>, Stat> tuple2 = ZkUtils.apply(zkc, false).readDataMaybeNull(path);
+                    JSONObject topicMetadata = JSON.parseObject(tuple2._1.get());
+                    MetadataInfo metadate = new MetadataInfo();
+                    metadate.setIsr(topicMetadata.getString("isr"));
+                    metadate.setLeader(topicMetadata.getInteger("leader"));
+                    metadate.setPartitionId(Integer.valueOf(partition));
+                    metadate.setReplicas(getReplicasIsr(KafkaZKConfig.CLUSTER_ZK_NAME, topic, Integer.valueOf(partition)));
+                    targets.add(metadate);
+                }
+            }
+        }
+        if (zkc != null) {
+            zkPool.releaseZKSerializer(KafkaZKConfig.CLUSTER_ZK_NAME, zkc);
+            zkc = null;
+        }
+        return targets;
+    }
+    /**
+     * According to topic and partition to obtain Replicas & Isr.
+     *
+     * @param topic
+     * @param partitionid
+     * @return String.
+     */
+    private String getReplicasIsr(String clusterAlias, String topic, int partitionid) {
+        ZkClient zkc = zkPool.getZkClientSerializer(clusterAlias);
+        Seq<Object> repclicasAndPartition = ZkUtils.apply(zkc, false).getInSyncReplicasForPartition(topic, partitionid);
+        List<Object> targets = JavaConversions.seqAsJavaList(repclicasAndPartition);
+        if (zkc != null) {
+            zkPool.releaseZKSerializer(clusterAlias, zkc);
+            zkc = null;
+        }
+        return targets.toString();
+    }
 
     //支持0.10.x, 0.9版本不起作用
     /**

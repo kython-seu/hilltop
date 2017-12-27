@@ -2,6 +2,7 @@ package kason.kafkamonitor.inter;
 
 import kason.kafkamonitor.constants.KafkaProperties;
 import kason.kafkamonitor.entity.KafkaBrokerInfo;
+import kason.kafkamonitor.entity.MetadataInfo;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +34,13 @@ public class KafkaMonitorServiceImplTest {
         logger.info("get consumer {}" , consumer);
     }
 
+    @Test
+    public void findTopicLeader() {
+        List<MetadataInfo> bayonet_vehiclepass = new KafkaMonitorServiceImpl().findKafkaLeader("BAYONET_VEHICLEPASS");
+        for(MetadataInfo metadataInfo: bayonet_vehiclepass){
+            logger.info("metadatainfo {}", metadataInfo);
+        }
+    }
 
 
 }
