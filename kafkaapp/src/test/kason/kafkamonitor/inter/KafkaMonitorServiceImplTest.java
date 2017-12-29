@@ -42,5 +42,11 @@ public class KafkaMonitorServiceImplTest {
         }
     }
 
+    @Test
+    public void getKafkaConsumerGroups(){
+        int kafkaConsumerGroups = new KafkaMonitorServiceImpl().getKafkaConsumerGroups(KafkaProperties.KAFKA_BROKERS);
+        logger.info("consumer number is {}", kafkaConsumerGroups);
+    }
+
 
 }

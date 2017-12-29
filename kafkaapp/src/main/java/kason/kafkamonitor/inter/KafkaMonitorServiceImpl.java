@@ -28,6 +28,7 @@ import scala.collection.Iterator;
 import kafka.admin.AdminClient.ConsumerGroupSummary;
 import scala.collection.JavaConversions;
 import scala.collection.Seq;
+import scala.collection.immutable.Map;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -182,4 +183,70 @@ public class KafkaMonitorServiceImpl implements KafkaMonitorService {
         return consumerGroups;
     }
 
+
+    /**
+     * 获取消费者组个数
+     * @return
+     */
+    @Override
+    public int getKafkaConsumerGroups(String kafka_brokers) {
+        Properties props = new Properties();
+        props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, kafka_brokers);
+        int count = 0;
+        
+        AdminClient adminClient = AdminClient.create(props);
+        try {
+            Map<Node, scala.collection.immutable.List<GroupOverview>> nodeListMap = adminClient.listAllConsumerGroups();
+            Iterator<Tuple2<Node, scala.collection.immutable.List<GroupOverview>>> groupIterator = nodeListMap.iterator();
+            while (groupIterator.hasNext()) {
+                Tuple2<Node, scala.collection.immutable.List<GroupOverview>> groupsTuple = groupIterator.next();
+                Iterator<GroupOverview> groups = groupsTuple._2.iterator();
+                while (groups.hasNext()) {
+                    GroupOverview group = groups.next();
+                    String groupId = group.groupId();
+                    logger.info("groupId {}", groupId);
+                    count++;
+
+                }
+            }
+        }catch (Exception e){
+            logger.info("error",e);
+        }finally {
+            adminClient.close();
+        }
+
+        return count;
+    }
+
+    /**
+     * 获取所有topic的Offset
+     * @return
+     */
+    @Override
+    public String getKafkaOffsetFromAllTopic(String kafka_brokers) {
+
+
+        /*Properties props = new Properties();
+        props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, kafka_brokers);
+        AdminClient adminClient = AdminClient.create(props);
+        try {
+            Map<Node, scala.collection.immutable.List<GroupOverview>> nodeListMap = adminClient.listAllConsumerGroups();
+            Iterator<Tuple2<Node, scala.collection.immutable.List<GroupOverview>>> groupIterator = nodeListMap.iterator();
+            while (groupIterator.hasNext()) {
+                Tuple2<Node, scala.collection.immutable.List<GroupOverview>> groupsTuple = groupIterator.next();
+                Iterator<GroupOverview> groups = groupsTuple._2.iterator();
+                while (groups.hasNext()) {
+                    GroupOverview group = groups.next();
+                    String groupId = group.groupId();
+                    logger.info("groupId {}", groupId);
+
+                }
+            }
+        }catch (Exception e){
+            logger.info("error",e);
+        }finally {
+            adminClient.close();
+        }*/
+        return null;
+    }
 }

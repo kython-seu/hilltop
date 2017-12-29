@@ -11,10 +11,7 @@
     <name>kafka-web Maven Webapp</name>
     <url>http://maven.apache.org</url>
     <dependencies>
-        <dependency>
-            <groupId>Spark2_10</groupId>
-            <artifactId>kafkaapp</artifactId>
-        </dependency>
+
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
