@@ -8,8 +8,8 @@ public class App
 {
     public static void main( String[] args )
     {
-        System.out.println( "Hello World!" );
-        StringBuilder s = new StringBuilder("820000000000654321");
-        System.out.println(s.reverse().toString());
+        String str = "test demo, star";
+        String news = str.replace("test","llo");
+        System.out.println(news);
     }
 }
