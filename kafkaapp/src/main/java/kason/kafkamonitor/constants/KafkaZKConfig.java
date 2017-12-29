@@ -11,9 +11,9 @@ public class KafkaZKConfig {
     public static final String TOPIC_ISR = "/brokers/topics/%s/partitions/%s/state";
     //zookeeper ip port
 
-    //public static final String ZOOKEEPER_IP_PORT = "hdh6:2181,hdh7:2181,hdh8:2181";
+    public static final String ZOOKEEPER_IP_PORT = "hdh6:2181,hdh7:2181,hdh8:2181";
     //public static final String ZOOKEEPER_IP_PORT = "localhost:2181";
-    public static final String ZOOKEEPER_IP_PORT = "10.66.71.121:2181,10.66.71.122:2181,10.66.71.123:2181";
+    //public static final String ZOOKEEPER_IP_PORT = "10.66.71.121:2181,10.66.71.122:2181,10.66.71.123:2181";
 
     public static final String CLUSTER_ZK_NAME = "cluster_zk";
 }

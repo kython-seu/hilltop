@@ -9,4 +9,7 @@ public class KafkaProperties {
     //public static final String KAFKA_BROKERS = "localhost:9092";
     public static final String KAFKA_BROKERS = "10.66.71.121:9092,10.66.71.122:9092,10.66.71.123:9092";
 
+    public static final class Kafka{
+        public final static String CONSUMER_OFFSET_TOPIC = "__consumer_offsets";
+    }
 }
