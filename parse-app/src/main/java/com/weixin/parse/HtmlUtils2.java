@@ -1,18 +1,13 @@
 package com.weixin.parse;
 
-/**
- * Created by zhangkai12 on 2018/1/3.
- */
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
 /**
- * html处理工具类
- * @author huweijun
- * @date 2016年7月13日 下午7:25:09
+ * Created by zhangkai12 on 2018/1/3.
  */
 public class HtmlUtils2 {
 

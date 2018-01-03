@@ -20,6 +20,7 @@ public class DownLoadRunnable implements Runnable {
     public DownLoadRunnable(String url, String path) {
         this.url = url;
         this.path = path;
+        logger.info("write path {}", path);
     }
 
     @Override
@@ -34,6 +35,8 @@ public class DownLoadRunnable implements Runnable {
 
     public void download(String _url,String path) throws Exception{
         try {
+
+            logger.info("Thread " + Thread.currentThread() + "start to download");
             // 构造URL
             URL url = new URL(_url);
             // 打开连接
