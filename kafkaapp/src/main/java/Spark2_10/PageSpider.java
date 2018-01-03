@@ -20,7 +20,8 @@ public class PageSpider implements Runnable {
     public PageSpider() {
 
         try {
-            url = "http://localhost:8081/view/share.jsp";
+            //url = "https://mp.weixin.qq.com/s/-YC51PDSpIJX0r83OSdTew";
+            url = "http://blog.csdn.net/u011203602/article/details/48679579";
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -47,6 +48,7 @@ public class PageSpider implements Runnable {
 
     public void run() {
         // TODO Auto-generated method stub
+        long start = System.currentTimeMillis();
         try {
             httpUrlConnection.setRequestMethod("GET");
         } catch (ProtocolException e) {
@@ -68,10 +70,6 @@ public class PageSpider implements Runnable {
 
             //bufferedWriter = new BufferedWriter(new OutputStreamWriter(new FileOutputStream("D:\\idea_workspace\\javen205-weixin_guide-master\\weixin_guide\\src\\main\\webapp\\view\\test.jsp"),"UTF-8"));
             bufferedWriter = new BufferedWriter(new FileWriter("D:\\\\idea_workspace\\\\javen205-weixin_guide-master\\\\weixin_guide\\\\src\\\\main\\\\webapp\\\\view\\\\test.jsp"));
-            String str = "<%@ page language=\"java\" contentType=\"text/html; charset=UTF-8\"\n" +
-                    "         pageEncoding=\"UTF-8\"%>";
-            bufferedWriter.write(str);
-            bufferedWriter.newLine();
             String string;
             while ((string = bufferedReader.readLine()) != null) {
                 System.out.println(string); // 打印输出
@@ -91,6 +89,8 @@ public class PageSpider implements Runnable {
             }
 
         }
+
+        System.out.println("time cost " + (System.currentTimeMillis() - start));
 
     }
 

@@ -12,6 +12,7 @@
         <module>kafkaapp</module>
         <module>sparkapp</module>
         <module>kafka-web</module>
+        <module>parse-app</module>
     </modules>
 
     <properties>
