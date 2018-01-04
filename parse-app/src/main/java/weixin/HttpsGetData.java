@@ -104,12 +104,19 @@ public class HttpsGetData {
 
 
     public static void main(String[] args) {
-        String url = "https://mp.weixin.qq.com/s/qLcSmXE0IoGti78qRV_RJQ";
+        //String url = "https://mp.weixin.qq.com/s/qLcSmXE0IoGti78qRV_RJQ";  //879 + 523
+
+        long start = System.currentTimeMillis();
+        String url = "https://mp.weixin.qq.com/s/-YC51PDSpIJX0r83OSdTew";//3310 + 800
+        //String url = "https://mp.weixin.qq.com/s/788FjzoNBpSLkXAFO2Pr-w";//7063
+        //String url = "https://mp.weixin.qq.com/s/qLcSmXE0IoGti78qRV_RJQ";//1390
         try {
             String download = new HttpsGetData(url).download();
             new WeiXinParser(url).replaceHtmlTag(download,"img", "data-src", "src=\"http://localhost:8080/wximages/", "\"");
         } catch (Exception e) {
             e.printStackTrace();
         }
+
+        System.out.println("all time cost " + (System.currentTimeMillis() - start));
     }
 }

@@ -80,7 +80,12 @@ public class WeiXinSpider {
         System.out.println("time1 cost " + (System.currentTimeMillis() - start));
         String parseHtml = doc.toString().replaceAll("data-src=", "src=");
         String htmlName = url.substring(url.lastIndexOf("/"));
-        write(parseHtml, "D:\\javen205-weixin_guide-master\\weixin_guide\\src\\main\\webapp\\weixin\\" + htmlName +".html");
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                write(parseHtml, "D:\\javen205-weixin_guide-master\\weixin_guide\\src\\main\\webapp\\weixin\\" + htmlName +".html");
+            }
+        }).start();
         System.out.println("time1 cost " + (System.currentTimeMillis() - start));
         for(Future f : imageFutures){
             try {

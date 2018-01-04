@@ -13,6 +13,7 @@
         <module>sparkapp</module>
         <module>kafka-web</module>
         <module>parse-app</module>
+        <module>weixin-app</module>
     </modules>
 
     <properties>

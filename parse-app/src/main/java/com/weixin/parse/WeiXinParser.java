@@ -18,14 +18,16 @@ public class WeiXinParser {
     private ThreadPoolExecutor executorService;
 
     private List<Future> imageFutures;
-    private static final int corePoolSize = 5;
-    private static final int maximumPoolSize = 10;
+    private static final int corePoolSize = 8;
+    private static final int maximumPoolSize = 15;
     private static final int keepAliveTime = 1;
-    private static final int queueSize = 10;
+    private static final int queueSize = 50;
 
     private String url_origin;
     //for test
     private static final String saveImgPath="D:\\idea_workspace\\javen205-weixin_guide-master\\weixin_guide\\src\\main\\webapp\\wximages\\";
+
+
 
     public WeiXinParser(String url) {
         this.url_origin = url;
@@ -89,6 +91,12 @@ public class WeiXinParser {
         String htmlName = url_origin.substring(url_origin.lastIndexOf("/"));
         System.out.println("here time cost " + (System.currentTimeMillis() - start));
         write(sb.toString(), "D:\\idea_workspace\\javen205-weixin_guide-master\\weixin_guide\\src\\main\\webapp\\wx\\" + htmlName +".html");
+        /*new Thread(new Runnable() {
+            @Override
+            public void run() {
+                write(sb.toString(), "D:\\idea_workspace\\javen205-weixin_guide-master\\weixin_guide\\src\\main\\webapp\\wx\\" + htmlName +".html");
+            }
+        }).start();*/
         System.out.println("here2 time cost " + (System.currentTimeMillis() - start));
         for(Future f : imageFutures){
             try {
