@@ -1,9 +1,0 @@
-{
-  "fields": [
-    { "name": "str1", "type": "string" },
-    { "name": "str2", "type": "string" },
-    { "name": "int1", "type": "int" }
-  ],
-  "name": "Iteblog",
-  "type": "record"
-}
