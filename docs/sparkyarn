@@ -1,0 +1,119 @@
+转化到YARN
+Oozie adds all of the jars in the Oozie Spark sharelib to the DistributedCache such that all jars will be present in the current working directory of the YARN container (as well as in the container classpath). However, this is not quite enough to make Spark 2.0 work, since Spark 2.0 by default looks for the jars in assembly/target/scala-2.11/jars [1] (as if it is a locally built distribution for development) and will not find them in the current working directory.
+To fix this, we can set spark.yarn.jars to *.jar so that it finds the jars in the current working directory rather than looking in the wrong place. [2]
+Spark Standalone 集群高可用模式转换到yarn
+(1)	安装部署时将spark 安装包下的jars上传到hdfs上hdfs://xxx/sparkjars
+(2)yarn-site.xml 置换到webapp/classes下的配置文件中
+(3)代码maven库引入spark-yarn
+(4)common的配置文件加入sparkjars的hdfs路径
+/usr/lib/cluster001/SERVICE-TRAFFIC-2564f330a4c044cd9be7d8ef041eed69/webapps/traffic/WEB-INF/classes
+spark.yarn.jars=hdfs://SERVICE-HADOOP-3169430eb13c4bce9704efe6d56ef886/sparkjars/*.jar
+(5)以前的SparkContext代码替换
+ 
+val sparkConf = new SparkConf()
+  .setAppName("FootHoldsByTrack")
+  //.setMaster("local[2]")
+  //.setMaster(sparkMaster)
+  .set("spark.master","yarn")
+  //.set("spark.yarn.jars",CommonUtils.getSparkLibJarsPath + "/*.jar")
+  //.set("spark.yarn.jars","hdfs://hdh52:8020/jars")
+  //.set("spark.yarn.jars","hdfs://hdh52:8020/sparkjars/*.jar")
+  //execuoterNum = spark.cores.max/spark.executor.cores
+  .set("spark.yarn.jars", SysConfigUtils.getString("spark.yarn.jars"))
+  .set("spark.executor.cores", "1")   //每个executor使用的核数
+  .set("spark.executor.instances", "2")  //申请3个executor, 3个container
+  .set("spark.executor.memory", "2G") //每个executor使用的内存
+  //.setJars(getSparkLibJars)
+  .setJars(CommonUtils.getSparkLibJars)
+
+(6)内存问题 Spark内存转给yarn
+
+
+
+关于内存计算:
+.set("spark.executor.cores", "1")   //每个executor使用的核数
+.set("spark.executor.instances", "1")  //申请3个executor, 3个container
+.set("spark.executor.memory", "1G") //每个executor使用的内存
+说明申请一个container用于计算, 每个container1个core, 每个container的executor的内存使用为1G
+观察日志:
+grep "block manager" tbp-log.log
+2018-01-12 16:01:48.294 INFO  [dispatcher-event-loop-16] [TBP] o.a.s.s.BlockManagerMasterEndpoint [Logging.scala - logInfo : 54] Registering block manager 10.66.71.122:42128 with 4.5 GB RAM, BlockManagerId(driver, 10.66.71.122, 42128, None)
+发现确实只启动了一个executor计算, 然后观察下AM申请内存
+2018-01-12 16:01:32.078 INFO  [catalina-exec-1] [TBP] o.a.s.d.y.Client [Logging.scala - logInfo : 54] Will allocate AM container, with 896 MB memory including 384 MB overhead
+日志显示AM申请了896的内存使用量, 其中384M是memeory overhead,实际上是使用了512M内存. 也就是Spark Yarn client模式的spark.yarn.am.memory的默认值	512m.
+ 
+观察yarn 我们却发现Running Container居然是2, 代码中明明设置的executor实例数为1, 也就是只有一个container, 为何为2? 因为多的这个是启动ApplicationMaster的container
+同理代码设置的每个executor的核为1, 那么总核数为1*1, 为何多了个1?因为多的那个1是启动ApplicationMaster所需要的资源了.
+现在问题来了上图中的2304MB内存怎么来的?
+ 
+spark.yarn.executor.memoryOverhead 这个是分配给每个exectutor的off-heap memory内存大小,是用于VM overheads, interned strings, other native overheads所使用
+spark.yarn.driver.memoryOverhead 这个是Spark yarn cluster模式情况下off-heap 内存大小, 是用于VM overheads, interned strings, other native overheads所使用
+spark.yarn.am.memoryOverhead 这个是Spark yarn client模式下off-heap 内存大小, 是用于VM overheads, interned strings, other native overheads所使用. 比如上面的那个日志:
+2018-01-12 16:01:32.078 INFO  [catalina-exec-1] [TBP] o.a.s.d.y.Client [Logging.scala - logInfo : 54] Will allocate AM container, with 896 MB memory including 384 MB overhead
+就可以看到 max(512M*0.1, 384M) = 384M的内存是分给overhead上的
+所以这个总内存是1 * (1024M + max(1024 M *0.1, 384M)) + 896M = 2304M
+
+
+
+再比如例子:
+val sparkConf = new SparkConf()
+  .setAppName("FootHoldsByTrack")
+  //.setMaster("local[2]")
+  //.setMaster(sparkMaster)
+  .set("spark.master","yarn")
+  //.set("spark.yarn.jars",CommonUtils.getSparkLibJarsPath + "/*.jar")
+  //.set("spark.yarn.jars","hdfs://hdh52:8020/jars")
+  //.set("spark.yarn.jars","hdfs://hdh52:8020/sparkjars/*.jar")
+  //execuoterNum = spark.cores.max/spark.executor.cores
+  .set("spark.yarn.jars", SysConfigUtils.getString("spark.yarn.jars"))
+  .set("spark.executor.cores", "1")   //每个executor使用的核数
+  .set("spark.executor.instances", "4")  //申请3个executor, 3个container
+  .set("spark.executor.memory", "1G") //每个executor使用的内存
+
+ 
+Container实例数目:
+2018-01-12 17:16:50.633 INFO  [dispatcher-event-loop-15] [TBP] o.a.s.s.BlockManagerMasterEndpoint [Logging.scala - logInfo : 54] Registering block manager 10.66.71.52:44855 with 11.6 GB RAM, BlockManagerId(driver, 10.66.71.52, 44855, None)
+2018-01-12 17:16:54.742 INFO  [dispatcher-event-loop-24] [TBP] o.a.s.s.BlockManagerMasterEndpoint [Logging.scala - logInfo : 54] Registering block manager hdh52:35560 with 408.9 MB RAM, BlockManagerId(1, hdh52, 35560, None)
+2018-01-12 17:16:55.929 INFO  [dispatcher-event-loop-27] [TBP] o.a.s.s.BlockManagerMasterEndpoint [Logging.scala - logInfo : 54] Registering block manager hdh52:34445 with 408.9 MB RAM, BlockManagerId(3, hdh52, 34445, None)
+2018-01-12 17:16:55.943 INFO  [dispatcher-event-loop-28] [TBP] o.a.s.s.BlockManagerMasterEndpoint [Logging.scala - logInfo : 54] Registering block manager hdh52:46405 with 408.9 MB RAM, BlockManagerId(2, hdh52, 46405, None)
+2018-01-12 17:16:59.096 INFO  [dispatcher-event-loop-30] [TBP] o.a.s.s.BlockManagerMasterEndpoint [Logging.scala - logInfo : 54] Registering block manager hdh52:44072 with 408.9 MB RAM, BlockManagerId(4, hdh52, 44072, None)
+可以看到总共有5个
+
+Am 内存申请
+2018-01-12 17:05:44.634 INFO  [catalina-exec-1] [TBP] o.a.s.d.y.Client [Logging.scala - logInfo : 54] Will allocate AM container, with 896 MB memory including 384 MB overhead
+
+Running containers 为5, 代码中设置的executors为4, 也就是container设为了4, 此时多的这一个是给的AM使用
+同理CPU的核数也是同样的原理, 4个executors实例, 使用了1 * 4个核, 多出来的那个核是给AM使用的.
+关于内存,内存的使用计算,
+4个executor(container)的内存使用, 每个executor使用1G, 则为4* (1024+ max(1024 * 0.1, 384M) = 5632MB
+AM 使用资源 1 * (512M + max(512M * 0.1 , 384M) = 896M
+所以总共使用了5632 + 896 = 6528M的内存使用量
+
+
+
+另外，因为任务是提交到YARN上运行的，所以YARN中有几个关键参数，参考YARN的内存和CPU配置：
+•	yarn.app.mapreduce.am.resource.mb：AM能够申请的最大内存，默认值为1536MB
+•	yarn.nodemanager.resource.memory-mb：nodemanager能够申请的最大内存，默认值为8192MB
+•	yarn.scheduler.minimum-allocation-mb：调度时一个container能够申请的最小资源，默认值为1024MB
+•	yarn.scheduler.maximum-allocation-mb：调度时一个container能够申请的最大资源，默认值为8192MB
+
+
+此处再来一个例子:
+val sparkConf = new SparkConf()
+  .setAppName("FootHoldsByTrack")
+  //.setMaster("local[2]")
+  //.setMaster(sparkMaster)
+  .set("spark.master","yarn")
+  //.set("spark.yarn.jars",CommonUtils.getSparkLibJarsPath + "/*.jar")
+  //.set("spark.yarn.jars","hdfs://hdh52:8020/jars")
+  //.set("spark.yarn.jars","hdfs://hdh52:8020/sparkjars/*.jar")
+  //execuoterNum = spark.cores.max/spark.executor.cores
+  .set("spark.yarn.jars", SysConfigUtils.getString("spark.yarn.jars"))
+  .set("spark.executor.cores", "1")   //每个executor使用的核数
+  .set("spark.executor.instances", "2")  //申请3个executor, 3个container
+  .set("spark.executor.memory", "2G") //每个executor使用的内存
+  //.setJars(getSparkLibJars)
+  .setJars(CommonUtils.getSparkLibJars)
+
+2 * (2048 + (2048 * 0.1, 384M)) + 896M = 5760M
+ 
