@@ -1,0 +1,146 @@
+public enum LabelString {
+        /**
+         * 人
+         */
+        person,
+        /**
+         * 车
+         */
+        car,
+        /**
+         * 案件
+         */
+        lawCase,
+        /**
+         * 旅馆
+         */
+        hotel,
+        /**
+         * 房产
+         */
+        realEstate,
+        /**
+         * 警情
+         */
+        alarmSituation
+    }
+    public enum EdgeString {
+        /**
+         * 监护人
+         */
+        guardian,
+        /**
+         * 父亲
+         */
+        father,
+        /**
+         * 母亲
+         */
+        mother,
+        /**
+         * 夫妻
+         */
+        marriage
+
+    }
+
+    public enum PropertyString {
+        /**
+         * 证件类型
+         */
+        idType(String.class),
+        /**
+         * 证件号码
+         */
+        id(String.class),
+        /**
+         * 姓名
+         */
+        name(String.class),
+        /**
+         * 性别
+         */
+        sex(String.class),
+        /**
+         * 出生日期
+         */
+        birthday(String.class),
+        /**
+         * 出生时间
+         */
+        birthTime(String.class),
+        /**
+         * 年龄
+         */
+        age(Integer.class),
+        /**
+         * 籍贯
+         */
+        personNative(String.class),
+        /**
+         * 国籍
+         */
+        nationality(String.class),
+        /**
+         * 民族
+         */
+        nation(String.class),
+        /**
+         * 文化程度
+         */
+        education(String.class),
+        /**
+         * 政治面貌
+         */
+        politics(String.class),
+        /**
+         * 户籍地详址
+         */
+        person_registered_place_detail_address(String.class),
+        /**
+         * 现住址详址
+         */
+        person_current_address_detail_address(String.class),
+        /**
+         * 联系电话
+         */
+        tel(String.class),
+        /**
+         * 手机号码
+         */
+        phone(String.class),
+        /**
+         * 户籍类型
+         */
+        person_census_register_type(String.class),
+        /**
+         * 婚姻状况
+         */
+        person_marital_status(String.class),
+        /**
+         * 出生地详址
+         */
+        person_birth_place_detail_address(String.class),
+        /**
+         * 宗教信仰
+         */
+        person_religious_belief(String.class),
+        /**
+         * 户号
+         */
+        person_household_number(String.class),
+        /**
+         * 人员编号
+         */
+        personnel_number(String.class);
+
+        private Class type;
+
+        PropertyString(Class type) {
+            this.type = type;
+        }
+
+        public Class getType() {
+            return type;
+        }
+    }
