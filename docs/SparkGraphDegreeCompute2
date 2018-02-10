@@ -1,0 +1,325 @@
+import java.util
+
+import datacreate.utils.GraphSingle
+import org.apache.hadoop.hbase.HBaseConfiguration
+import org.apache.hadoop.hbase.client.{Result, Scan}
+import org.apache.hadoop.hbase.filter.{ColumnRangeFilter, FilterList}
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable
+import org.apache.hadoop.hbase.mapreduce.TableInputFormat
+import org.apache.hadoop.hbase.protobuf.ProtobufUtil
+import org.apache.hadoop.hbase.util.{Base64, Bytes}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.{SparkConf, SparkContext}
+import org.janusgraph.core.JanusGraph
+import org.janusgraph.diskstorage.ReadBuffer
+import org.janusgraph.diskstorage.util.StaticArrayBuffer
+import org.janusgraph.graphdb.database.idhandling.IDHandler.DirectionID
+import org.janusgraph.graphdb.database.idhandling.VariableLong
+import org.janusgraph.graphdb.idmanagement.IDManager
+import org.janusgraph.graphdb.idmanagement.IDManager.VertexIDType
+import org.janusgraph.graphdb.transaction.StandardJanusGraphTx
+
+
+/**
+  * Created by zhangkai12 on 2018/2/7.
+  */
+object SparkGraphDegreeCompute2 {
+    private val byte64: Array[Byte] = Array[Byte](64)
+    private val byte96: Array[Byte] = Array[Byte](96)
+    private val byte128: Array[Byte] = Array[Byte](-128)
+    private val byte36: Array[Byte] = Array[Byte](36)
+    private val byte37: Array[Byte] = Array[Byte](37)
+
+    private val PREFIX_BIT_LEN: Int = 3
+
+    def main(args: Array[String]): Unit = {
+
+        val start: Long = System.currentTimeMillis()
+
+        val sconf = new SparkConf().setAppName("test").setMaster("local[4]")
+        val sc = new SparkContext(sconf)
+
+        val conf = HBaseConfiguration.create()
+        conf.set("hbase.zookeeper.quorum", "hdh122,hdh121,hdh123")
+
+        val scan: Scan = new Scan()
+        scan.addFamily(Bytes.toBytes("e"))
+        val myFilterList = new FilterList(FilterList.Operator.MUST_PASS_ONE)
+        myFilterList.addFilter(new ColumnRangeFilter(byte96, true, byte128, false)) //用户的边
+        myFilterList.addFilter(new ColumnRangeFilter(byte64, true, byte96, false)) //用户的Property
+        scan.setFilter(myFilterList)
+        scan.setCaching(10000)
+        val proto = ProtobufUtil.toScan(scan)
+        conf.set(TableInputFormat.SCAN, Base64.encodeBytes(proto.toByteArray))
+        conf.set(TableInputFormat.INPUT_TABLE,"hiki")
+        val resultRDD = sc.newAPIHadoopRDD(conf, classOf[TableInputFormat],
+            classOf[ImmutableBytesWritable],
+            classOf[Result])
+
+        val rdd: RDD[(Long, (Int, Int))] = resultRDD.map( res => {
+            val rowKeyBytes = res._2.getRow
+
+            val userVertexId: Long = getUserVertexId(StaticArrayBuffer.of(rowKeyBytes))
+            //println("is it equal " + userVertexId)
+            val cfMap = res._2.getMap
+            val colMap = cfMap.get(Bytes.toBytes("e")) //获取e列族的键值对值, key是列限定符(也是typeId), value是具体值
+            val iter = colMap.entrySet().iterator()
+            var inDegreeNum: Int = 0
+            var outDegreeNum: Int = 0
+            while (iter.hasNext){
+                val entry = iter.next()
+                val key: Array[Byte] = entry.getKey  //是keyId, 就是那个属性顶点的vertexId, 也就是列限定符
+                //这里只计算出入度, 属性信息全部不取
+                val pre: Byte = key(0)
+                val after: Byte = findKeyNegativeEnd(key)
+                val dirId = (((pre >>> 5) & 1 ) << 1) + (after & 1)
+
+                val keyBytes: ReadBuffer = StaticArrayBuffer.of(key).asReadBuffer()
+                val countPrefix: Array[Long] = VariableLong.readPositiveWithPrefix(keyBytes, PREFIX_BIT_LEN)
+                val dirId2: Int = calInAndOutDirection(countPrefix)
+
+                println("equal ? " + (dirId == dirId2))
+                dirId match {
+                    case 0 =>
+                        DirectionID.PROPERTY_DIR
+                    case 2 =>
+                        DirectionID.EDGE_OUT_DIR
+                        outDegreeNum = outDegreeNum + 1
+                        //println(userVertexId + " key" + util.Arrays.toString(key) + "----" + dirId)
+                    case 3 =>
+                        DirectionID.EDGE_IN_DIR
+                        inDegreeNum = inDegreeNum + 1
+                        //println(userVertexId + " key" + util.Arrays.toString(key) + "----" + dirId)
+                }
+            }
+            (userVertexId, (inDegreeNum, outDegreeNum))
+        })
+
+
+        println(rdd.count() )
+        println("calculate cost : " + (System.currentTimeMillis() - start) )
+        rdd.persist()
+        rdd.foreach( res => {
+            val vertexId: Long = res._1
+            val degree: (Int, Int) = res._2
+            println("顶点 " + vertexId + " 入度 " + degree._1 +" 出度 " + degree._2)
+        })
+
+        //rdd.saveAsTextFile("hdfs://SERVICE-HADOOP-6025ec46be9c46a88c2056962ea8f04b/test")
+        rdd.unpersist()
+
+    }
+
+
+    def calInAndOutDirection(countPrefix: Array[Long]) :Int={
+        val relationType: Int = (countPrefix(1) & 1).toInt
+        val direction: Int = (countPrefix(0) & 1).toInt
+
+        val dirId: Int = (relationType << 1) + direction
+        dirId
+    }
+
+    def getUserVertexId(staticArrayBuffer: StaticArrayBuffer): Long = {
+        val partitionBits: Int = 5
+        val partitionOffset: Long =  java.lang.Long.SIZE - partitionBits
+
+        val value: Long = staticArrayBuffer.getLong(0)
+        if (VertexIDType.Schema.is(value)) {
+            value
+        }else{
+            var theType: IDManager.VertexIDType = null
+            import org.janusgraph.core.InvalidIDException
+            import org.janusgraph.graphdb.idmanagement.IDManager.VertexIDType
+            if (VertexIDType.NormalVertex.is(value))
+                theType = VertexIDType.NormalVertex
+            else if (VertexIDType.PartitionedVertex.is(value))
+                theType = VertexIDType.PartitionedVertex
+            else if (VertexIDType.UnmodifiableVertex.is(value))
+                theType = VertexIDType.UnmodifiableVertex
+            if (null == theType)
+                throw new InvalidIDException("Vertex ID " + value + " has unrecognized type")
+            var partition: Long = 0L
+            if (partitionOffset < java.lang.Long.SIZE)
+                partition = value >>> partitionOffset
+            else
+                partition = 0L
+
+            val count: Long = (value >>> 3) & ((1L << (partitionOffset - 3)) - 1)
+            var id: Long = (count << partitionBits) + partition
+            if(theType != null){
+                id = theType.addPadding(id)
+            }
+
+            id
+        }
+    }
+
+
+    //find the first num < 0
+    def findKeyNegativeEnd(arr: Array[Byte]): Byte = {
+        for( i <- 1 until arr.length){
+            if ( arr(i) < 0){
+                return arr(i)
+            }
+        }
+        arr.last
+    }
+}
+
+
+
+import java.util
+import java.util.Map.Entry
+
+import datacreate.utils.GraphSingle
+import org.apache.hadoop.hbase.HBaseConfiguration
+import org.apache.hadoop.hbase.client.{Result, Scan}
+import org.apache.hadoop.hbase.filter.{ColumnRangeFilter, FilterList}
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable
+import org.apache.hadoop.hbase.mapreduce.TableInputFormat
+import org.apache.hadoop.hbase.protobuf.ProtobufUtil
+import org.apache.hadoop.hbase.util.{Base64, Bytes}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.{SparkConf, SparkContext}
+import org.janusgraph.core.{JanusGraph, PropertyKey, RelationType}
+import org.janusgraph.diskstorage.ReadBuffer
+import org.janusgraph.diskstorage.hbase.HBaseKeyColumnValueStore
+import org.janusgraph.diskstorage.util.{ReadArrayBuffer, StaticArrayBuffer, StaticArrayEntry}
+import org.janusgraph.graphdb.database.EdgeSerializer
+import org.janusgraph.graphdb.database.idhandling.IDHandler
+import org.janusgraph.graphdb.database.idhandling.IDHandler.DirectionID
+import org.janusgraph.graphdb.database.serialize.{OrderPreservingSerializer, SupportsNullSerializer}
+import org.janusgraph.graphdb.database.serialize.attribute.{IntegerSerializer, StringSerializer}
+import org.janusgraph.graphdb.idmanagement.IDManager
+import org.janusgraph.graphdb.transaction.StandardJanusGraphTx
+import org.janusgraph.graphdb.types.vertices.EdgeLabelVertex
+
+import scala.reflect.ClassTag
+
+/**
+  * Created by zhangkai12 on 2018/2/3.
+  */
+object SparkHbaseParse {
+
+    private val byte64: Array[Byte] = Array[Byte](64)
+    private val byte96: Array[Byte] = Array[Byte](96)
+    private val byte128: Array[Byte] = Array[Byte](-128)
+    private val byte36: Array[Byte] = Array[Byte](36)
+    private val byte37: Array[Byte] = Array[Byte](37)
+
+    var idManager: IDManager = null
+    var tx: StandardJanusGraphTx = null
+    var gragh: JanusGraph = null
+    val entryGetter = new HBaseKeyColumnValueStore.HBaseGetter(StaticArrayEntry.EMPTY_SCHEMA)
+    var edgeSerializer: EdgeSerializer = null
+    val stringSerializer: StringSerializer = new StringSerializer()
+    def main(args: Array[String]): Unit = {
+        init()
+        val sconf = new SparkConf().setAppName("test").setMaster("local[4]")
+        val sc = new SparkContext(sconf)
+        val conf = HBaseConfiguration.create()
+        conf.set("hbase.zookeeper.quorum", "hdh122,hdh121,hdh123")
+
+        val scan: Scan = new Scan()
+        scan.addFamily(Bytes.toBytes("e"))
+        val myFilterList = new FilterList(FilterList.Operator.MUST_PASS_ONE)
+        myFilterList.addFilter(new ColumnRangeFilter(byte96, true, byte128, false)) //用户的边
+        myFilterList.addFilter(new ColumnRangeFilter(byte64, true, byte96, false)) //用户的Property
+        scan.setFilter(myFilterList)
+        scan.setCaching(10000)
+        val proto = ProtobufUtil.toScan(scan)
+        conf.set(TableInputFormat.SCAN, Base64.encodeBytes(proto.toByteArray))
+        conf.set(TableInputFormat.INPUT_TABLE,"hiki_test")
+
+        val resultRDD = sc.newAPIHadoopRDD(conf, classOf[TableInputFormat],
+            classOf[ImmutableBytesWritable],
+            classOf[Result])
+
+        val rdd: RDD[(Long, (Int, Int))] = resultRDD.map( res => {
+            val rowKeyBytes = res._2.getRow
+            val userVertexId: Long = idManager.getKeyID(StaticArrayBuffer.of(rowKeyBytes)) //得到VertexId的值
+            val cfMap = res._2.getMap
+            val colMap = cfMap.get(Bytes.toBytes("e")) //获取e列族的键值对值, key是列限定符(也是typeId), value是具体值
+            val entrySet = colMap.entrySet()
+            val iter = entrySet.iterator()
+            var inDegreeNum: Int = 0
+            var outDegreeNum: Int = 0
+            while (iter.hasNext){
+                val entry = iter.next()
+                val key: Array[Byte] = entry.getKey  //感觉像是keyId, 就是那个属性顶点的vertexId, 也就是列限定符
+                val parseQualify: IDHandler.RelationTypeParse = IDHandler.readRelationType(StaticArrayBuffer.of(key).asReadBuffer())
+                val propertyKeyId: Long = parseQualify.typeId  //可能是PropertyKey 也可能是EdgeLabelVertex 的id
+                val dirID: DirectionID = parseQualify.dirID
+
+                val relationType: RelationType = tx.getExistingRelationType(propertyKeyId)
+
+                var classType: Class[_] = null
+
+                relationType match {
+                    case rt: PropertyKey =>
+                        val propertyKey: PropertyKey = tx.getExistingRelationType(propertyKeyId).asInstanceOf[PropertyKey]
+                        classType = propertyKey.dataType()
+                        val serializer = getClass(classType.getName)
+                        dirID match {
+                            case DirectionID.PROPERTY_DIR => {
+                                println("PropertyKey it is PROPERTY_DIR")
+                                //需要先查出类型
+                                val value = entry.getValue.lastEntry.getValue
+                                val in: ReadBuffer = new ReadArrayBuffer(value)
+                                try {
+                                    println("vertexId: " + userVertexId + " typeId: " + parseQualify.typeId + " dirId: " + parseQualify.dirID + " ***** " + entry.getValue.lastEntry.getKey + "========" + util.Arrays.toString(key) + "____value: " + serializer.read(in))
+                                }catch {
+                                    case e: Exception =>
+                                        println("vertexId" + userVertexId + " typeId: " + parseQualify.typeId + " dirId: " + parseQualify.dirID  + " ***** " + entry.getValue.lastEntry.getKey + "========" + util.Arrays.toString(key))
+                                }
+                            }
+                        }
+
+                    case rt: EdgeLabelVertex =>
+                        val edgeLabelVertex: EdgeLabelVertex = tx.getExistingRelationType(propertyKeyId).asInstanceOf[EdgeLabelVertex]
+
+                        dirID match {
+                            case DirectionID.EDGE_OUT_DIR => {
+                                outDegreeNum = outDegreeNum + 1
+                                println("vertexId: " + userVertexId + " typeId: " + parseQualify.typeId + " dirId: " + parseQualify.dirID + " ***** " + "EdgeLabelVertex it is EDGE_OUT_DIR")
+                            }
+                            case DirectionID.EDGE_IN_DIR => {
+                                inDegreeNum = inDegreeNum + 1
+                                println("vertexId: " + userVertexId + " typeId: " + parseQualify.typeId + " dirId: " + parseQualify.dirID + " ***** " + "EdgeLabelVertex it is EDGE_IN_DIR")
+                            }
+                        }
+                }
+            }
+            (userVertexId, (inDegreeNum, outDegreeNum))
+        })
+
+
+        println(rdd.count() )
+        rdd.persist()
+        rdd.foreach( res => {
+            val vertexId: Long = res._1
+            val degree: (Int, Int) = res._2
+
+            println("顶点 " + vertexId + " 入度 " + degree._1 +" 出度 " + degree._2)
+        })
+        rdd.unpersist()
+    }
+
+    def init(): Unit ={
+        gragh = GraphSingle.getGraphSingleInstance.getGraph
+        tx = gragh.newTransaction().asInstanceOf[(StandardJanusGraphTx)]
+        edgeSerializer = tx.getEdgeSerializer
+        idManager = tx.getGraph.getIDManager
+    }
+
+    def getClass[classType: ClassTag](classType: String): OrderPreservingSerializer[classType] = {
+        println("*********************************************" + classType)
+        classType match {
+            case "java.lang.String" =>
+                new StringSerializer().asInstanceOf[OrderPreservingSerializer[classType]]
+            case "java.lang.Integer" =>
+                new IntegerSerializer().asInstanceOf[OrderPreservingSerializer[classType]]
+        }
+    }
+}
+
