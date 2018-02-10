@@ -1,0 +1,152 @@
+package hbaseUtils;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+
+/**
+ * Created by zhangkai12 on 2018/2/3.
+ */
+public class ConfigurationFactory {
+    public static Configuration getConfiguration() {
+        String hdfs = "hdfs";
+        System.setProperty("HADOOP_USER_NAME", hdfs);
+
+        Configuration conf = HBaseConfiguration.create();
+
+        // 缺省值参考: org.apache.hadoop.hbase.HConstants
+        conf.setLong("hbase.rpc.timeout", 10000);
+        conf.setInt("hbase.client.retries.number", 3);
+        conf.setLong("zookeeper.session.timeout", 30000);
+        conf.setLong("hbase.htable.threads.keepalivetime", 600000);
+        return conf;
+    }
+}
+package hbaseUtils;
+
+import org.apache.hadoop.hbase.*;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.RegionLocator;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.janusgraph.util.system.NetworkUtil;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Created by zhangkai12 on 2018/2/9.
+ */
+public class HbaseRegion {
+
+
+    public static void main(String[] args) {
+        /**/
+        getRegionInfo("hiki", "");
+    }
+
+
+    private static void traversalRegion(){
+        Connection conn = HbaseUtils.getConn();
+        Admin admin = null;
+        try {
+            admin = conn.getAdmin();
+            ClusterStatus cluster_status  = admin.getClusterStatus();
+            ServerName master = cluster_status.getMaster();
+            for (ServerName sever : cluster_status.getServers()){
+                Map<byte[], RegionLoad> regionsLoad = cluster_status.getLoad(sever).getRegionsLoad();
+                for (Map.Entry<byte[], RegionLoad> entry : regionsLoad.entrySet()){
+                    RegionLoad region = entry.getValue();
+                    String regionName = region.getNameAsString();
+                    int regionStoreFileSize  = region.getStorefileSizeMB();
+                    long regionRequests  = region.getRequestsCount();
+                    System.out.println("-----------------------------------------");
+                    System.out.println("reginonName " + regionName +" regionStoreFileSize " + regionStoreFileSize + " regionRequests " + regionRequests);
+                    if(regionName.startsWith("hiki_test")){
+                        System.out.println("find ");
+                    }
+
+                }
+
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    private static void getRegionInfo(String tableName, String region_server_name){
+        Connection conn = HbaseUtils.getConn();
+        Admin admin = null;
+        try {
+            admin = conn.getAdmin();
+            ClusterStatus cluster_status  = admin.getClusterStatus();
+            ServerName master = cluster_status.getMaster();
+            RegionLocator hregion_locator_instance = conn.getRegionLocator(TableName.valueOf(tableName));
+
+            //获取TableName.valueOf(tableName)表的所有regionLocation
+            List<HRegionLocation> allRegionLocations = hregion_locator_instance.getAllRegionLocations();
+
+
+            for(HRegionLocation hRegionLocation : allRegionLocations){
+
+                //获取hostname
+                String hostname = hRegionLocation.getHostname();
+                if(NetworkUtil.isLocalConnection(hostname)){
+                    System.out.println(" it is hostName, local connection");
+                }
+                //if(hRegionLocation.getServerName().)
+                System.out.println(hRegionLocation.getServerName().toString());
+                HRegionInfo regionInfo = hRegionLocation.getRegionInfo();
+                byte[] startKeyBytes = regionInfo.getStartKey();
+                byte[] endKeyBytes = regionInfo.getEndKey();
+                String startKey = Bytes.toString(startKeyBytes);
+                String endKey = Bytes.toString(endKeyBytes);
+
+                System.out.println("startKey " + startKey +" endKey " + endKey);
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
+package hbaseUtils;
+
+import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.Table;
+
+import java.io.IOException;
+
+/**
+ * Created by zhangkai12 on 2018/2/3.
+ */
+public class HbaseUtils {
+
+    private static Configuration config = ConfigurationFactory.getConfiguration();
+    private static Connection connection;
+    public static synchronized Connection getConn() {
+
+
+        if (connection == null) {
+            try {
+                connection = ConnectionFactory.createConnection(config);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        return connection;
+    }
+
+    public static Table _getTable(String tableName) throws IOException {
+        if (StringUtils.isEmpty(tableName)){
+            return null;
+        }
+
+        return getConn().getTable(TableName.valueOf(tableName));
+    }
+}
