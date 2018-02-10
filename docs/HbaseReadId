@@ -1,0 +1,87 @@
+package hbaseUtils;
+
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.*;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.janusgraph.diskstorage.ReadBuffer;
+import org.janusgraph.diskstorage.StaticBuffer;
+import org.janusgraph.diskstorage.util.StaticArrayBuffer;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.NavigableMap;
+
+import static org.janusgraph.util.encoding.StringEncoding.UTF8_CHARSET;
+
+/**
+ * Created by zhangkai12 on 2018/2/9.
+ */
+public class HbaseReadId {
+    private static final int INT_BYTE_SIZE = 4;
+    private static final int LONG_BYTE_SIZE = 8;
+    public static void main(String[] args) {
+        Connection conn = HbaseUtils.getConn();
+        ResultScanner resultScanner = null;
+        try {
+            //Table janusgraph = conn.getTable(TableName.valueOf("janusgraph"));
+            Table janusgraph = conn.getTable(TableName.valueOf("hiki"));
+            Scan scan = new Scan();
+            //scan.addFamily(Bytes.toBytes("ids"));
+            scan.addFamily(Bytes.toBytes("i"));
+            scan.setCaching(1000);
+            resultScanner = janusgraph.getScanner(scan);
+            for( Result r : resultScanner){
+
+                byte[] row = r.getRow();//ids rowKeys 字节数为8, 两个int, 第一个int是Int型partition<<(Integer.SIZE- partitionBitWidth) + uniqueId, 第二个是idNamespace
+                System.out.println("partition rowKey" + Arrays.toString(row));
+                StaticArrayBuffer rowStaticBuffer = StaticArrayBuffer.of(row);
+                ReadBuffer rowReadBuffer = rowStaticBuffer.asReadBuffer();
+                int parititonPre = rowReadBuffer.getInt(0);
+                int idNamespace = rowReadBuffer.getInt(0 + INT_BYTE_SIZE);
+                System.out.println("parititonPre is " + parititonPre + " idNamespace " + idNamespace);
+                NavigableMap<byte[], NavigableMap<byte[], NavigableMap<Long, byte[]>>> cfMap = r.getMap();
+
+                for(Map.Entry<byte[], NavigableMap<byte[], NavigableMap<Long, byte[]>>> entry : cfMap.entrySet()){
+
+                    byte[] key = entry.getKey();//列族名
+                    System.out.println("列族名: " + Arrays.toString(key) +"-----" + Bytes.toString(key) );
+                    NavigableMap<byte[], NavigableMap<Long, byte[]>> colMap = cfMap.get(key);//<列限定符, <timestamp, value>>
+                    for (Map.Entry<byte[], NavigableMap<Long, byte[]>> colEntry : colMap.entrySet()){
+                        byte[] colBytes = colEntry.getKey();//列限定符
+                        System.out.println("列限定符的 ArrayBytes " + Arrays.toString(colBytes));
+                        //解析列限定符号
+                        ReadBuffer colReadBuffer = StaticArrayBuffer.of(colBytes).asReadBuffer();
+                        long blockValueInHbase = -colReadBuffer.getLong(0);
+                        long timestamp = colReadBuffer.getLong(0 + LONG_BYTE_SIZE);
+                        String uniqueInstanceId = new String(colReadBuffer.getBytes(0 + LONG_BYTE_SIZE + LONG_BYTE_SIZE,colBytes.length - (0 + LONG_BYTE_SIZE + LONG_BYTE_SIZE)), UTF8_CHARSET);
+                        System.out.println("partitionKey " + Arrays.toString(row) +" current blockValueInHbase " + blockValueInHbase + " timestamp " + timestamp + " unique instance id " + uniqueInstanceId);
+                        for (Map.Entry<Long, byte[]> vlaueEntry : colEntry.getValue().entrySet()){
+                            System.out.println("key " + vlaueEntry.getKey() + " value " + Arrays.toString(vlaueEntry.getValue()));
+                        }
+                    }
+
+                }
+
+                System.out.println("------------------------------------------------------------------------------------");
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+
+            if(null != resultScanner){
+                resultScanner.close();
+            }
+            try {
+                if( null != conn) {
+                    conn.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+    }
+}
